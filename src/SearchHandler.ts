@@ -3,55 +3,48 @@ import axios from "axios";
 import pgvector from "pgvector";
 
 const databaseClient = new Pool({
-  host: process.env.PostgresHOST,
-  user: process.env.PostgresUSER,
-  password: process.env.PostgresPW,
-  database: process.env.PostgresDB,
-  port: 6543,
+  host: process.env.POSTGRES_HOST,
+  user: process.env.POSTGRES_USER,
+  password: process.env.POSTGRES_PW,
+  database: process.env.POSTGRES_DB,
+  port: 5432,
   max: 5,
 });
 
 export class SearchHandler {
-  regexKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/gi;
-  regexEnglish = /[a-zA-Z]/gi;
-
   constructor() {
     void databaseClient.connect();
   }
 
   async doSearch(value: string): Promise<SearchResult[] | []> {
-    const [primaryLanguage, languageValue] = this.getPrimaryLanguage(value);
-
     const query =
-      `SELECT id, typeid, name_eng, name_kor FROM items WHERE name_` +
-      primaryLanguage +
-      `=$1`;
-    const result = await databaseClient.query(query, [languageValue]);
-    // console.log(query, languageValue, result.rows);
+      "SELECT embeddings.type_id, names_en.name_en, names_ko.name_ko FROM item_embeddings as embeddings	JOIN item_names_en AS names_en ON embeddings.type_id = names_en.type_id JOIN item_names_ko AS names_ko ON embeddings.type_id = names_ko.type_id	WHERE name = $1";
+    const result = await databaseClient.query(query, [value]);
+
     return result.rows as SearchResult[];
   }
 
   async doSmartSearch(value: string): Promise<SearchResult[]> {
-    if (process.env.EmbeddingAPIURL === undefined) {
-      throw new Error("EmbeddingAPIURL is not defined");
+    if (process.env.EMBEDDING_API_URL === undefined) {
+      throw new Error("EMBEDDING_API_URL is not defined");
     }
 
     const embeddingResponse = await axios.post(
-      process.env.EmbeddingAPIURL,
+      process.env.EMBEDDING_API_URL,
       {
         input: value,
-        model: process.env.EmbeddingModel,
+        model: process.env.EMBEDDING_MODEL_TYPE,
       },
       {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.EmbeddingAPIKey}`,
+          Authorization: `Bearer ${process.env.EMBEDDING_API_KEY}`,
         },
       },
     );
 
     // embedding들의 cosine 유사도 계산
-    const query = `SELECT id, typeid, name_eng, name_kor, 1 - (embedding <=> $1) AS similarity FROM items ORDER BY similarity DESC LIMIT 5`;
+    const query = `SELECT embeddings.type_id, names_en.name_en, names_ko.name_ko, 1 - (embedding <=> $1) AS similarity FROM item_embeddings AS embeddings JOIN item_names_en AS names_en ON embeddings.type_id = names_en.type_id JOIN item_names_ko AS names_ko ON embeddings.type_id = names_ko.type_id ORDER BY similarity DESC LIMIT 5`;
     const embeddingValue = [
       pgvector.toSql(
         (embeddingResponse.data as EmbeddingAPIResponse).data[0].embedding,
@@ -59,19 +52,6 @@ export class SearchHandler {
     ];
     const result = await databaseClient.query(query, embeddingValue);
     return result.rows as SearchResult[];
-  }
-
-  getPrimaryLanguage(value: string): ["kor" | "eng", string] {
-    const koreanValue = value.replace(this.regexEnglish, "");
-    const englishValue = value.replace(this.regexKorean, "");
-
-    // console.log("kor:", koreanValue.length);
-    // console.log("eng:", englishValue.length);
-    if (englishValue.length >= koreanValue.length) {
-      return ["eng", englishValue];
-    }
-
-    return ["kor", koreanValue];
   }
 }
 
@@ -85,9 +65,7 @@ interface EmbeddingAPIResponseData {
 }
 
 interface SearchResult {
-  id: string;
-  typeid: number;
-  name_eng: string;
-  name_kor: string;
-  similarity: number;
+  type_id: number;
+  name_en: string;
+  name_ko: string;
 }

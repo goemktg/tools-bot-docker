@@ -3,11 +3,9 @@ import {
   CommandInteraction,
   EmbedBuilder,
 } from "discord.js";
-// import { EsiRequester } from "./library/handlers/EsiRequester";
+import { EsiRequester } from "./library/handlers/EsiRequester";
 import axios from "axios";
-// import vega, { Spec } from "vega";
-// import sharp from "sharp";
-// import spec from "./static/vega_spec.json";
+import QuickChart from "quickchart-js";
 
 export class PriceHandler {
   async replyPrice(
@@ -18,12 +16,12 @@ export class PriceHandler {
     await interaction.editReply(
       "아이템 `" + itemName + "`의 가격을 검색중입니다...",
     );
-    // const esiRequester = new EsiRequester();
-    // const priceHistory =
-    //   await esiRequester.getPriceHistoryFromTypeIdAndRegionId(
-    //     "10000002",
-    //     itemTypeID.toString(),
-    //   );
+    const esiRequester = new EsiRequester();
+    const priceHistory =
+      await esiRequester.getPriceHistoryFromTypeIdAndRegionId(
+        "10000002",
+        itemTypeID.toString(),
+      );
 
     const currentPriceResponse = await axios.get(
       "https://market.fuzzwork.co.uk/aggregates/?region=10000002&types=" +
@@ -48,29 +46,86 @@ export class PriceHandler {
       .setThumbnail(
         "https://images.evetech.net/types/" + itemTypeID + "/icon?size=64",
       );
-    await interaction.editReply({
-      content: "",
-      embeds: [embed],
+
+    // make charts
+    //console.log(priceHistory);
+    const thirtyDayPriceHistory = priceHistory.slice(
+      priceHistory.length - 30,
+      priceHistory.length,
+    );
+    //console.log(thirtyDayPriceHistory);
+    const myChart = new QuickChart();
+    myChart.setConfig({
+      type: "line",
+      data: {
+        labels: thirtyDayPriceHistory.map((x) => x.date),
+        datasets: [
+          {
+            label: "average",
+            data: thirtyDayPriceHistory.map((x) => x.average),
+            fill: false,
+          },
+          {
+            label: "highest",
+            data: thirtyDayPriceHistory.map((x) => x.highest),
+            fill: false,
+            borderDash: [2, 2],
+          },
+          {
+            label: "lowest",
+            data: thirtyDayPriceHistory.map((x) => x.lowest),
+            fill: false,
+            borderDash: [2, 2],
+          },
+        ],
+      },
+      options: {
+        scales: {
+          xAxes: [
+            {
+              type: "time",
+              time: {
+                parser: "YYYY-MM-DD",
+                displayFormats: {
+                  day: "MMM DD",
+                },
+              },
+            },
+          ],
+          yAxes: [
+            {
+              ticks: {
+                callback: (val: number) => {
+                  if (!val) return 0;
+                  const units = ["", "K", "M", "B"];
+                  const k = 1000;
+                  const magnitude = Math.floor(Math.log(val) / Math.log(k));
+                  return val / Math.pow(k, magnitude) + " " + units[magnitude];
+                },
+              },
+            },
+          ],
+        },
+      },
     });
 
-    // TODO: 히스토리 기능 추가
-    // spec.data[0].values = priceHistory;
+    const historyEmbed = new EmbedBuilder()
+      .setTitle("가격 기록")
+      .setImage("attachment://chart.png")
+      .setDescription(
+        itemName + "\n포지 리전 최근 30일간 중간/최고/최저 거래가격 변동 내역",
+      )
+      .setTimestamp();
 
-    // // TODO: fix unknown to resolve type error
-    // const view = new vega.View(vega.parse(spec as unknown as Spec))
-    //   .renderer("none")
-    //   .initialize();
-
-    // const svg = await view.toSVG();
-    // const webp = await sharp(Buffer.from(svg)).webp().toBuffer();
-    // await interaction.editReply({
-    //   files: [
-    //     {
-    //       attachment: webp,
-    //       name: "price.webp",
-    //     },
-    //   ],
-    // });
+    await interaction.editReply({
+      embeds: [embed, historyEmbed],
+      files: [
+        {
+          name: "chart.png",
+          attachment: myChart.getUrl(),
+        },
+      ],
+    });
   }
 }
 

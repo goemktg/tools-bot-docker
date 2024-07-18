@@ -35,8 +35,8 @@ const GrillReloadCommand: SlashCommand = {
         const priceHandler = new PriceHandler();
         await priceHandler.replyPrice(
           interaction,
-          searchResult[0].name_eng + " (" + searchResult[0].name_kor + ")",
-          searchResult[0].typeid.toString(),
+          searchResult[0].name_en + " (" + searchResult[0].name_ko + ")",
+          searchResult[0].type_id.toString(),
         );
         return;
       }
@@ -47,14 +47,14 @@ const GrillReloadCommand: SlashCommand = {
       for (const result of smartSearchResult) {
         const button = new ButtonBuilder()
           .setStyle(ButtonStyle.Secondary)
-          .setLabel(result.name_eng + " (" + result.name_kor + ")")
+          .setLabel(result.name_en + " (" + result.name_ko + ")")
           .setCustomId(
             "price:" +
-              result.typeid.toString() +
+              result.type_id.toString() +
               ":" +
-              result.name_eng +
+              result.name_en +
               " (" +
-              result.name_kor +
+              result.name_ko +
               ")",
           );
 
