@@ -44,7 +44,7 @@ export class SearchHandler {
     );
 
     // embedding들의 cosine 유사도 계산
-    const query = `SELECT embeddings.type_id, names_en.name_en, names_ko.name_ko, 1 - (embedding <=> $1) AS similarity FROM item_embeddings AS embeddings JOIN item_names_en AS names_en ON embeddings.type_id = names_en.type_id JOIN item_names_ko AS names_ko ON embeddings.type_id = names_ko.type_id ORDER BY similarity DESC LIMIT 5`;
+    const query = `SELECT embeddings.type_id, names_en.name_en, names_ko.name_ko, 1 - (embedding <=> $1) AS similarity FROM item_embeddings AS embeddings JOIN item_names_en AS names_en ON embeddings.type_id = names_en.type_id JOIN item_names_ko AS names_ko ON embeddings.type_id = names_ko.type_id ORDER BY similarity DESC LIMIT 10`;
     const embeddingValue = [
       pgvector.toSql(
         (embeddingResponse.data as EmbeddingAPIResponse).data[0].embedding,

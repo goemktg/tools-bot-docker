@@ -45,6 +45,10 @@ const GrillReloadCommand: SlashCommand = {
       const row = new ActionRowBuilder<ButtonBuilder>();
 
       for (const result of smartSearchResult) {
+        if (row.components.length >= 5) {
+          break;
+        }
+
         const button = new ButtonBuilder()
           .setStyle(ButtonStyle.Secondary)
           .setLabel(result.name_en + " (" + result.name_ko + ")")
@@ -57,6 +61,9 @@ const GrillReloadCommand: SlashCommand = {
               result.name_ko +
               ")",
           );
+        if (row.components.includes(button)) {
+          continue;
+        }
 
         row.addComponents(button);
       }
