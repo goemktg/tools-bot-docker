@@ -5,8 +5,8 @@ import {
   SlashCommandBuilder,
 } from "discord.js";
 import { SlashCommand } from "../library/types";
-import { SearchHandler } from "../SearchHandler";
-import { PriceHandler } from "../PriceHandler";
+import { SearchHandler } from "../classes/SearchHandler";
+import { PriceHandler } from "../classes/PriceHandler";
 
 const GrillReloadCommand: SlashCommand = {
   command: new SlashCommandBuilder()

@@ -3,7 +3,7 @@ import {
   CommandInteraction,
   EmbedBuilder,
 } from "discord.js";
-import { EsiRequester } from "./library/handlers/EsiRequester";
+import { EsiRequester } from "../library/classes/EsiHandler";
 import axios from "axios";
 import QuickChart from "quickchart-js";
 

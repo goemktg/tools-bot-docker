@@ -8,6 +8,9 @@ import pgvector from "pgvector";
 import Bottleneck from "bottleneck";
 import * as cliProgress from "cli-progress";
 
+import { MarketItemsTableRecord } from "../classes/SearchHandler";
+import { APIGetEmbeddingResponse } from "../classes/EmbeddingHandler";
+
 import "../library/loadEnvironmentVariables";
 
 const client = new pg.Pool({
@@ -380,30 +383,6 @@ interface APIInfo {
   modelType: string;
   url: string;
   key: string;
-}
-
-interface APIGetEmbeddingResponse {
-  object: "list";
-  data: [
-    {
-      object: "embedding";
-      embedding: number[];
-      index: number;
-    },
-  ];
-  model: string;
-  usage: {
-    prompt_tokens: number;
-    total_tokens: number;
-  };
-}
-
-interface MarketItemsTableRecord {
-  type_id: number;
-  name_en: string;
-  name_ko: string;
-  embedding_en: string;
-  embedding_ko: string;
 }
 
 type TypeEntry = Record<number, TypeValue>;
