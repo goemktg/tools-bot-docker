@@ -3,22 +3,15 @@ import { readdirSync } from "fs";
 import axios from "axios";
 import fs from "fs/promises";
 import StreamZip from "node-stream-zip";
-import pg from "pg";
 import pgvector from "pgvector";
 import Bottleneck from "bottleneck";
 import * as cliProgress from "cli-progress";
 
-import { MarketItemsTableRecord } from "../classes/SearchHandler";
-import { APIGetEmbeddingResponse } from "../classes/EmbeddingHandler";
+import { EmbeddingHandler } from "../classes/EmbeddingHandler";
+import { SearchHandler } from "../classes/SearchHandler";
 
 import "../library/loadEnvironmentVariables";
-
-const client = new pg.Pool({
-  host: process.env.POSTGRES_HOST,
-  user: process.env.POSTGRES_USER,
-  password: process.env.POSTGRES_PW,
-  database: process.env.POSTGRES_DB,
-});
+import { DatabaseHandler } from "../library/classes/DatabaseHandler";
 
 const bar = new cliProgress.MultiBar(
   {
@@ -30,6 +23,9 @@ const bar = new cliProgress.MultiBar(
   cliProgress.Presets.shades_classic,
 );
 const bars: cliProgress.SingleBar[] = [];
+
+const databaseHandler = new DatabaseHandler();
+const searchHandler = new SearchHandler(databaseHandler);
 
 let isTerminating = false;
 
@@ -104,21 +100,6 @@ function processTypes(types: TypeEntry) {
   console.log("Start importing types...");
   bars.push(bar.create(Object.keys(types).length, 0));
 
-  if (!process.env.EMBEDDING_API_URL)
-    throw new Error(
-      "EMBEDDING_API_URL is not defined in the environment variables",
-    );
-
-  if (!process.env.EMBEDDING_API_KEY)
-    throw new Error(
-      "EMBEDDING_API_KEY is not defined in the environment variables",
-    );
-
-  if (!process.env.EMBEDDING_MODEL_TYPE)
-    throw new Error(
-      "EMBEDDING_MODEL_TYPE is not defined in the environment variables",
-    );
-
   for (const typeID of Object.keys(types)) {
     if (isTerminating) {
       console.error("Terminating Scheduler...");
@@ -139,29 +120,27 @@ function processTypes(types: TypeEntry) {
       continue;
     }
 
-    void insertMarketItemWithRateLimit(parseInt(typeID), typeValue, {
-      modelType: process.env.EMBEDDING_MODEL_TYPE,
-      url: process.env.EMBEDDING_API_URL,
-      key: process.env.EMBEDDING_API_KEY,
-    }).catch((error) => {
-      if (error instanceof Bottleneck.BottleneckError) {
-        if (error.message != "This limiter has been stopped.") {
-          console.error(
-            "BottleneckError while inserting market item:\n",
-            error,
-          );
+    void insertMarketItemWithRateLimit(parseInt(typeID), typeValue).catch(
+      (error) => {
+        if (error instanceof Bottleneck.BottleneckError) {
+          if (error.message != "This limiter has been stopped.") {
+            console.error(
+              "BottleneckError while inserting market item:\n",
+              error,
+            );
+          }
         }
-      }
 
-      if (!(error instanceof Bottleneck.BottleneckError)) {
-        bar.stop();
-        console.error("Error while inserting market item:\n", error);
-        if (!isTerminating) {
-          void limiter.stop();
-          isTerminating = true;
+        if (!(error instanceof Bottleneck.BottleneckError)) {
+          bar.stop();
+          console.error("Error while inserting market item:\n", error);
+          if (!isTerminating) {
+            void limiter.stop();
+            isTerminating = true;
+          }
         }
-      }
-    });
+      },
+    );
   }
 }
 
@@ -254,35 +233,30 @@ function applyCustomValue(typeID: number, typeValue: TypeValue): TypeValue {
         throw new Error("typeID: " + typeID + " already has a korean name.");
       typeValue.name.ko = "CONCORD Victory SKIN";
       break;
+    case 44992:
+      // PLEX
+      typeValue.name.ko = "플렉스";
+      break;
     default:
   }
 
   return typeValue;
 }
-async function insertMarketItem(
-  typeID: number,
-  typeData: TypeValue,
-  apiInfo: APIInfo,
-) {
+async function insertMarketItem(typeID: number, typeData: TypeValue) {
   if (isTerminating) return;
 
-  const check = await client.query(
-    "SELECT * FROM market_items WHERE type_id = $1",
-    [typeID],
-  );
+  const check = await searchHandler.doSearchFromTypeID(typeID);
 
-  if (check.rows.length > 0) {
+  if (check.length > 0) {
     // console.log(
     //   "typeID:",
     //   typeID,
     //   "already exists in the database. checking text change",
     // );
 
-    const checkData = check.rows[0] as MarketItemsTableRecord;
-
     if (
-      checkData.name_en != typeData.name.en ||
-      checkData.name_ko != typeData.name.ko
+      check[0].name_en != typeData.name.en ||
+      check[0].name_ko != typeData.name.ko
     ) {
       //TODO: update the record
       throw new Error("name of typeID " + typeID + " is changed. need update.");
@@ -294,15 +268,17 @@ async function insertMarketItem(
     return;
   }
 
+  const embeddingHandler = new EmbeddingHandler();
+
   const enString = typeData.name.en;
-  const enEmbedding = await getEmbedding(enString, apiInfo);
+  const enEmbedding = await embeddingHandler.getEmbedding(enString);
   const koString = typeData.name.ko;
   if (!koString) {
     throw new Error(
       "WARNING! typeID: " + typeID + " does not have a korean name.",
     );
   }
-  const koEmbedding = await getEmbedding(koString, apiInfo);
+  const koEmbedding = await embeddingHandler.getEmbedding(koString);
   bar.log("calculated embedding for typeID: " + typeID + "\n");
   // console.log(
   //   "calculated embedding for typeID:",
@@ -313,7 +289,7 @@ async function insertMarketItem(
   //   koEmbedding,
   // );
 
-  await client.query(
+  await databaseHandler.query(
     "INSERT INTO market_items (type_id, name_en, name_ko, embedding_en, embedding_ko) VALUES ($1, $2, $3, $4, $5)",
     [
       typeID,
@@ -332,26 +308,6 @@ const limiter = new Bottleneck({
 });
 const insertMarketItemWithRateLimit = limiter.wrap(insertMarketItem);
 // https://platform.openai.com/docs/api-reference/embeddings/create
-async function getEmbedding(
-  translation: string,
-  apiInfo: APIInfo,
-): Promise<number[]> {
-  const response = await axios.post(
-    apiInfo.url,
-    {
-      input: translation,
-      model: apiInfo.modelType,
-    },
-    {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiInfo.key}`,
-      },
-    },
-  );
-
-  return (response.data as APIGetEmbeddingResponse).data[0].embedding;
-}
 
 async function getChecksum(): Promise<string> {
   console.log("getting checksum from CCP...");
@@ -377,12 +333,6 @@ function checkFileExists(): [true, string] | [false, null] {
   }
 
   return [false, null];
-}
-
-interface APIInfo {
-  modelType: string;
-  url: string;
-  key: string;
 }
 
 type TypeEntry = Record<number, TypeValue>;
