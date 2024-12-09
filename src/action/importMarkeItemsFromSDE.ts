@@ -246,7 +246,6 @@ async function insertMarketItem(typeID: number, typeData: TypeValue) {
   if (isTerminating) return;
 
   const check = await searchHandler.doSearchFromTypeID(typeID);
-  let isNameChanged = false;
 
   if (check.length > 0) {
     if (
@@ -254,7 +253,9 @@ async function insertMarketItem(typeID: number, typeData: TypeValue) {
       check[0].name_ko != typeData.name.ko
     ) {
       bar.log("name of typeID " + typeID + " is changed. need updating" + "\n");
-      isNameChanged = true;
+      await databaseHandler.query("DELETE FROM market_items WHERE type_id=$1", [
+        typeID,
+      ]);
     } else {
       bar.log("name not changed. skipping typeID " + typeID + "\n");
       bars[0].increment();
@@ -283,29 +284,16 @@ async function insertMarketItem(typeID: number, typeData: TypeValue) {
   //   koEmbedding,
   // );
 
-  if (isNameChanged) {
-    await databaseHandler.query(
-      "UPDATE market_items SET name_en = $1, name_ko = $2, embedding_en = $3, embedding_ko = $4 WHERE type_id = $5",
-      [
-        enString,
-        koString,
-        pgvector.toSql(enEmbedding),
-        pgvector.toSql(koEmbedding),
-        typeID,
-      ],
-    );
-  } else {
-    await databaseHandler.query(
-      "INSERT INTO market_items (type_id, name_en, name_ko, embedding_en, embedding_ko) VALUES ($1, $2, $3, $4, $5)",
-      [
-        typeID,
-        enString,
-        koString,
-        pgvector.toSql(enEmbedding),
-        pgvector.toSql(koEmbedding),
-      ],
-    );
-  }
+  await databaseHandler.query(
+    "INSERT INTO market_items (type_id, name_en, name_ko, embedding_en, embedding_ko) VALUES ($1, $2, $3, $4, $5)",
+    [
+      typeID,
+      enString,
+      koString,
+      pgvector.toSql(enEmbedding),
+      pgvector.toSql(koEmbedding),
+    ],
+  );
 
   bars[0].increment();
 }
