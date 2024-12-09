@@ -248,12 +248,6 @@ async function insertMarketItem(typeID: number, typeData: TypeValue) {
   const check = await searchHandler.doSearchFromTypeID(typeID);
 
   if (check.length > 0) {
-    // console.log(
-    //   "typeID:",
-    //   typeID,
-    //   "already exists in the database. checking text change",
-    // );
-
     if (
       check[0].name_en != typeData.name.en ||
       check[0].name_ko != typeData.name.ko
@@ -303,6 +297,9 @@ async function insertMarketItem(typeID: number, typeData: TypeValue) {
   bars[0].increment();
 }
 
+// 3000 requests per minute
+// 50 requests per second
+// 요청당 20ms지만 한 함수에서 두 번 요청하므로 40ms 딜레이 필요
 const limiter = new Bottleneck({
   minTime: 40,
 });
