@@ -1,7 +1,8 @@
 import { SeatHanlder } from "../library/classes/SeatHandler";
 import "../library/loadEnvironmentVariables";
 
-const acceptors = new Map<string, acceptorInfo>();
+const deliveryPerAcceptors = new Map<string, deliveryInfo>();
+const deliveryPerMonth = new Map<string, deliveryInfo>();
 
 // set time range
 const startDate = new Date("2023-01-01T00:00:00Z");
@@ -21,37 +22,46 @@ async function getContracts() {
     page += 1;
 
     for (const contract of contracts.data) {
+      // skip if not courier or not finished
       if (contract.type !== "courier" || contract.status !== "finished")
         continue;
 
+      // skip if not in time range
       const dateCompletedString =
         contract.date_completed.replace(" ", "T") + "Z";
       const dateCompleted = new Date(dateCompletedString);
       if (dateCompleted < startDate || dateCompleted > endDate) continue;
 
-      safeAdd(contract.acceptor.name, contract.volume);
+      const dateYYMM = contract.date_completed.slice(2, 7);
+      safeAdd(deliveryPerAcceptors, contract.acceptor.name, contract.volume);
+      safeAdd(deliveryPerMonth, dateYYMM, contract.volume);
     }
-    console.log(acceptors);
+    console.log(deliveryPerAcceptors);
+    console.log(deliveryPerMonth);
   }
 }
 
-function safeAdd(acceptorName: string, deliveryVolume: number) {
-  let acceptorInfo = acceptors.get(acceptorName);
+function safeAdd(
+  data: Map<string, deliveryInfo>,
+  name: string,
+  volume: number,
+) {
+  let deliveryInfo = data.get(name);
 
-  if (acceptorInfo === undefined) {
-    acceptorInfo = {
+  if (deliveryInfo === undefined) {
+    deliveryInfo = {
       totalDeliveryCount: 0,
       totalDeliveryVolume: 0,
     };
   }
 
-  acceptorInfo.totalDeliveryCount += 1;
-  acceptorInfo.totalDeliveryVolume += deliveryVolume;
+  deliveryInfo.totalDeliveryCount += 1;
+  deliveryInfo.totalDeliveryVolume += volume;
 
-  acceptors.set(acceptorName, acceptorInfo);
+  data.set(name, deliveryInfo);
 }
 
-interface acceptorInfo {
+interface deliveryInfo {
   totalDeliveryCount: number;
   totalDeliveryVolume: number;
 }
