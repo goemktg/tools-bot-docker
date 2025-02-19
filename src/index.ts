@@ -3,8 +3,8 @@ import {
   loadEnvironmentVariables,
   setDefaultLogLevel,
 } from "./library/functions";
-import { CommandsHandler } from "./library/handlers/Commands";
-import { PriceHandler } from "./PriceHandler";
+import { CommandsHandler } from "./library/classes/CommandHandler";
+import { PriceHandler } from "./classes/PriceHandler";
 
 loadEnvironmentVariables();
 setDefaultLogLevel();
